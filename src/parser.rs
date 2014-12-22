@@ -35,7 +35,7 @@ impl TelnetTokenizer {
 
   pub fn tokenize<'a, 'b>(&'a mut self, data: &'b [u8]) -> TokenStream<'a, 'b> {
     TokenStream {
-      state: self,
+      context: self,
       data: data,
     }
   }
@@ -43,7 +43,7 @@ impl TelnetTokenizer {
 
 
 pub struct TokenStream<'a, 'b> {
-  pub state: &'a mut TelnetTokenizer,
+  pub context: &'a mut TelnetTokenizer,
   pub data: &'b [u8],
 }
 
@@ -62,7 +62,7 @@ impl<'a, 'b> TokenStream<'a, 'b> {
   }
 
   fn command_state(&self) -> ParseResult<'b> {
-    if (*self.state.is_long_command).call((self.data[0],)) {
+    if (*self.context.is_long_command).call((self.data[0],)) {
       (None, Subchannel(self.data[0]), self.data[1..])
     } else if self.data[0] == b'\xFF' {
       (Some(TelnetToken::Text(b"\xFF")), Neutral, self.data[1..])
@@ -108,7 +108,7 @@ impl<'a, 'b> TokenStream<'a, 'b> {
       return None
     }
 
-    let (token, state, data) = match self.state.state {
+    let (token, state, data) = match self.context.state {
       Neutral => {
         self.neutral_state()
       }
@@ -123,7 +123,7 @@ impl<'a, 'b> TokenStream<'a, 'b> {
       }
     };
 
-    self.state.state = state;
+    self.context.state = state;
     self.data = data;
     return token;
   }
