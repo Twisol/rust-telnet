@@ -2,6 +2,7 @@
 //#![allow(dead_code, unused_parens)]
 use parser::{TelnetTokenizer, TelnetToken};
 use std::collections::{VecMap};
+use std::cell::{RefCell};
 
 mod parser;
 
@@ -49,8 +50,8 @@ impl QState {
 pub struct TelnetCore<'a> {
   pub active_channel: Option<u8>,
   pub qstate: QState,
-  pub channels: VecMap<(QState, Box<ChannelEndpoint + 'a>)>,
-  pub commands: VecMap<Box<CommandEndpoint + 'a>>,
+  pub channels: VecMap<(QState, &'a (ChannelEndpoint + 'a))>,
+  pub commands: VecMap<&'a (CommandEndpoint + 'a)>,
 }
 
 impl<'a> TelnetCore<'a> {
@@ -69,8 +70,9 @@ fn main() {
 
   let mut tokenizer = TelnetTokenizer::new();
   let mut context = TelnetCore::new();
-  context.channels.insert(32, (QState::new(), box Foo));
-  context.commands.insert(240, box Foo);
+  let foo = Foo(RefCell::new(Bar(42)));
+  context.channels.insert(32, (QState::new(), &foo));
+  context.commands.insert(240, &foo);
 
   for &data in stream.iter() {
     for token in tokenizer.tokenize(data) {
@@ -80,24 +82,24 @@ fn main() {
 }
 
 pub trait ChannelEndpoint {
-  fn on_data<'a>(&mut self, _: Option<u8>, _: &'a [u8]) {}
-  fn on_enable(&mut self, _: Option<u8>) {}
-  fn on_disable(&mut self, _: Option<u8>) {}
-  fn on_focus(&mut self, _: Option<u8>) {}
-  fn on_blur(&mut self, _: Option<u8>) {}
+  fn on_data<'a>(&self, _: Option<u8>, _: &'a [u8]) {}
+  fn on_enable(&self, _: Option<u8>) {}
+  fn on_disable(&self, _: Option<u8>) {}
+  fn on_focus(&self, _: Option<u8>) {}
+  fn on_blur(&self, _: Option<u8>) {}
 }
 
 pub trait CommandEndpoint {
-  fn on_command(&mut self, _: Option<u8>, _: u8) {}
+  fn on_command(&self, _: Option<u8>, _: u8) {}
 }
 
 pub trait NegotiableChannel: ChannelEndpoint {
-  fn should_enable(&mut self) -> bool { false }
+  fn should_enable(&self) -> bool { false }
 }
 
 struct DefaultEndpoint;
 impl ChannelEndpoint for DefaultEndpoint {
-  fn on_data<'a>(&mut self, channel: Option<u8>, data: &'a [u8]) {
+  fn on_data<'a>(&self, channel: Option<u8>, data: &'a [u8]) {
     match channel {
       None     => println!("[{}]: {}", 'M', data),
       Some(ch) => println!("[{}]: {}", ch.to_string(), data),
@@ -105,7 +107,7 @@ impl ChannelEndpoint for DefaultEndpoint {
   }
 }
 impl CommandEndpoint for DefaultEndpoint {
-  fn on_command(&mut self, channel: Option<u8>, cmd: u8) {
+  fn on_command(&self, channel: Option<u8>, cmd: u8) {
     match channel {
       None     => println!("IAC {}", cmd),
       Some(ch) => println!("IAC {} {}", cmd, ch),
@@ -113,15 +115,22 @@ impl CommandEndpoint for DefaultEndpoint {
   }
 }
 
-struct Foo;
-impl ChannelEndpoint for Foo {
-  fn on_data<'a>(&mut self, _channel: Option<u8>, text: &'a [u8]) {
-    println!("[FOO]: {}", text);
+struct Bar(u8);
+struct Foo<'a>(RefCell<Bar>);
+impl<'a> ChannelEndpoint for Foo<'a> {
+  fn on_data<'b>(&self, _channel: Option<u8>, text: &'b [u8]) {
+    let mut bar = (self.0).borrow_mut();
+    bar.0 += 1;
+    println!("[FOO]: {} {}", bar.0, text);
   }
 }
-impl CommandEndpoint for Foo {
-  fn on_command(&mut self, _channel: Option<u8>, _command: u8) {
-    println!("TEST TEST");
+
+impl<'a> CommandEndpoint for Foo<'a> {
+  fn on_command(&self, _channel: Option<u8>, _command: u8) {
+    let mut bar = (self.0).borrow_mut();
+    bar.0 += 1;
+
+    println!("TEST TEST {}", bar.0);
   }
 }
 
@@ -129,16 +138,16 @@ impl<'a> TelnetCore<'a> {
   fn dispatch(&mut self, token: TelnetToken) {
     match token {
       TelnetToken::Text(text) => {
-        let mut default = DefaultEndpoint;
+        let default = DefaultEndpoint;
         let channel = match self.active_channel {
           Some(ch) => {
             match self.channels.get_mut(&(ch as uint)) {
-              Some(&(_, ref mut channel)) => { &mut **channel }
-              None => { (&mut default) as (&mut ChannelEndpoint) }
+              Some(&(_, ref channel)) => { &**channel }
+              None => { &default as &ChannelEndpoint }
             }
           }
           None => {
-            (&mut default) as (&mut ChannelEndpoint)
+            &default as &ChannelEndpoint
           }
         };
 
@@ -154,10 +163,10 @@ impl<'a> TelnetCore<'a> {
           _ => {}
         }
 
-        let mut default = DefaultEndpoint;
+        let default = DefaultEndpoint;
         let channel = match self.commands.get_mut(&(command as uint)) {
-          Some(mut channel) => { &mut **channel }
-          None => { (&mut default) as (&mut CommandEndpoint) }
+          Some(channel) => { &**channel }
+          None => { &default as &CommandEndpoint }
         };
 
         channel.on_command(None, command);
