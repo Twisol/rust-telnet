@@ -69,8 +69,8 @@ fn main() {
 
   let mut tokenizer = TelnetTokenizer::new();
   let mut context = TelnetCore::new();
-  context.channels.insert(32, (QState::new(), box Foo(32)));
-  context.commands.insert(240, box Foo(240));
+  context.channels.insert(32, (QState::new(), box Foo));
+  context.commands.insert(240, box Foo);
 
   for &data in stream.iter() {
     for token in tokenizer.tokenize(data) {
@@ -113,7 +113,7 @@ impl CommandEndpoint for DefaultEndpoint {
   }
 }
 
-struct Foo(u8);
+struct Foo;
 impl ChannelEndpoint for Foo {
   fn on_data<'a>(&mut self, _channel: Option<u8>, text: &'a [u8]) {
     println!("[FOO]: {}", text);
