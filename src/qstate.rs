@@ -19,6 +19,12 @@ impl QStateUni {
 }
 
 #[deriving(Show, Copy)]
+pub enum QAttitude {
+  Local,
+  Remote,
+}
+
+#[deriving(Show, Copy)]
 pub struct QState {
   pub local: QStateUni,
   pub remote: QStateUni,
@@ -29,7 +35,10 @@ impl QState {
     QState{local: QStateUni::Disabled, remote: QStateUni::Disabled}
   }
 
-  pub fn is_active(&self) -> bool {
-    self.local.is_enabled() || self.remote.is_enabled()
+  pub fn is_active(&self, attitude: QAttitude) -> bool {
+    match attitude {
+      QAttitude::Local => self.local.is_enabled(),
+      QAttitude::Remote => self.remote.is_enabled(),
+    }
   }
 }
