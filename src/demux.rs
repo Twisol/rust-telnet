@@ -1,14 +1,17 @@
-use parser::{TelnetToken};
 use std::collections::{VecMap};
-pub use std::cell::{RefCell};
+use std::cell::{RefCell};
+use dispatch::{DataEndpoint, CommandEndpoint};
 use qstate::{QState};
 
-const SE: u8 = 240;
-const SB: u8 = 250;
-const WILL: u8 = 251;
-const WONT: u8 = 252;
-const DO: u8 = 253;
-const DONT: u8 = 254;
+#[allow(non_snake_case)]
+pub mod IAC {
+  pub const SE: uint = 240;
+  pub const SB: uint = 250;
+  pub const WILL: uint = 251;
+  pub const WONT: uint = 252;
+  pub const DO: uint = 253;
+  pub const DONT: uint = 254;
+}
 
 
 pub trait ChannelEndpoint {
@@ -18,14 +21,6 @@ pub trait ChannelEndpoint {
   fn on_focus(&mut self, _: Option<u8>) {}
   fn on_blur(&mut self, _: Option<u8>) {}
 }
-pub trait CommandEndpoint {
-  fn on_command(&mut self, _: Option<u8>, _: u8) {}
-}
-pub trait NegotiableChannel: ChannelEndpoint {
-  fn should_enable(&mut self, _: Option<u8>) -> bool { false }
-}
-
-
 pub trait PChannelEndpoint {
   fn _on_data<'a>(&self, _: Option<u8>, _: &'a [u8]) {}
   fn _on_enable(&self, _: Option<u8>) {}
@@ -33,6 +28,8 @@ pub trait PChannelEndpoint {
   fn _on_focus(&self, _: Option<u8>) {}
   fn _on_blur(&self, _: Option<u8>) {}
 }
+
+impl PChannelEndpoint for () {}
 
 impl<T> PChannelEndpoint for RefCell<T>
 where T: ChannelEndpoint {
@@ -53,120 +50,64 @@ where T: ChannelEndpoint {
   }
 }
 
-
-pub trait PCommandEndpoint {
-  fn _on_command(&self, _: Option<u8>, _: u8) {}
-}
-
-impl<T> PCommandEndpoint for RefCell<T>
-where T: CommandEndpoint {
-  fn _on_command(&self, channel: Option<u8>, command: u8) {
-    self.borrow_mut().on_command(channel, command);
-  }
-}
-
-
-pub trait PNegotiableChannel: PChannelEndpoint {
-  fn _should_enable(&self, _: Option<u8>) -> bool { false }
-}
-
-impl<T> PNegotiableChannel for RefCell<T>
-where T: NegotiableChannel {
-  fn _should_enable(&self, channel: Option<u8>) -> bool {
-    self.borrow_mut().should_enable(channel)
-  }
-}
-
-
-struct DefaultEndpoint;
-impl PChannelEndpoint for DefaultEndpoint {
-  fn _on_data<'a>(&self, channel: Option<u8>, data: &'a [u8]) {
-    match channel {
-      None     => println!("[{}]: {}", 'M', data),
-      Some(ch) => println!("[{}]: {}", ch.to_string(), data),
-    }
-  }
-}
-impl PCommandEndpoint for DefaultEndpoint {
-  fn _on_command(&self, channel: Option<u8>, cmd: u8) {
-    match channel {
-      None     => println!("IAC {}", cmd),
-      Some(ch) => println!("IAC {} {}", cmd, ch),
-    }
-  }
-}
-
+static DEFAULT_ENDPOINT: () = ();
 
 pub struct TelnetDemux<'a> {
+  pub qstate: [QState, ..256],
   pub active_channel: Option<u8>,
-  pub qstate: QState,
   pub channels: VecMap<&'a (PChannelEndpoint + 'a)>,
-  pub commands: VecMap<&'a (PCommandEndpoint + 'a)>,
+  pub main_channel: &'a (PChannelEndpoint + 'a),
 }
-
-
 impl<'a> TelnetDemux<'a> {
   pub fn new() -> TelnetDemux<'a> {
     TelnetDemux {
-      qstate: QState::new(),
+      qstate: [QState::new(), ..256],
       active_channel: None,
       channels: VecMap::new(),
-      commands: VecMap::new(),
+      main_channel: &DEFAULT_ENDPOINT,
     }
   }
-
-  pub fn dispatch(&mut self, token: TelnetToken) {
-    match token {
-      TelnetToken::Text(text) => {
-        let default = DefaultEndpoint;
-        let channel = match self.active_channel {
-          Some(ch) => {
-            match self.channels.get_mut(&(ch as uint)) {
-              Some(channel) => { &**channel }
-              None => { &default as &PChannelEndpoint }
-            }
-          }
-          None => {
-            &default as &PChannelEndpoint
-          }
-        };
-
-        channel._on_data(self.active_channel, text);
-      }
-
-      TelnetToken::Command(command) => {
-        match command {
-          SE => {
-            self.active_channel = None;
-          }
-
-          _ => {}
+}
+impl<'a> CommandEndpoint for TelnetDemux<'a> {
+  fn on_command(&mut self, channel: Option<u8>, command: u8) {
+    match channel {
+      None => {
+        match command as uint {
+          IAC::SE => {
+            self.active_channel = channel;
+            println!("IAC SE");
+          },
+          _  => {},
         }
-
-        let default = DefaultEndpoint;
-        let channel = match self.commands.get_mut(&(command as uint)) {
-          Some(channel) => { &**channel }
-          None => { &default as &PCommandEndpoint }
-        };
-
-        channel._on_command(None, command);
-      }
-
-      TelnetToken::Negotiation{command, channel} => {
-        match command {
-          WILL => {}
-          WONT => {}
-          DO => {}
-          DONT => {}
-
-          SB => {
-            self.active_channel = Some(channel);
-          }
-
-          _ => {}
+      },
+      Some(ch) => {
+        match command as uint {
+          IAC::WILL => println!("IAC WILL {}", ch),
+          IAC::WONT => println!("IAC WONT {}", ch),
+          IAC::DO   => println!("IAC DO {}", ch),
+          IAC::DONT => println!("IAC DONT {}", ch),
+          IAC::SB   => {
+            self.active_channel = channel;
+            println!("IAC SB {}", ch);
+          },
+          _    => {},
         }
-        DefaultEndpoint._on_command(Some(channel), command);
       }
-    }
+    };
+  }
+}
+impl<'a> DataEndpoint for TelnetDemux<'a> {
+  fn on_data<'b>(&mut self, data: &'b [u8]) {
+    let endpoint = match self.active_channel {
+      Some(ch) => {
+        match self.channels.get(&(ch as uint)) {
+          Some(endpoint) => { &**endpoint }
+          None => { &DEFAULT_ENDPOINT as &PChannelEndpoint }
+        }
+      },
+      None => { self.main_channel },
+    };
+
+    endpoint._on_data(self.active_channel, data);
   }
 }

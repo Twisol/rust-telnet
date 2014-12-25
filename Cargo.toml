@@ -1,5 +1,4 @@
 [package]
-
 name = "rust-telnet"
 version = "0.0.1"
 authors = ["Jonathan Castello <twisolar@gmail.com>"]

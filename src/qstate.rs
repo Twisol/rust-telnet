@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 #[deriving(Show, Copy, PartialEq)]
 pub enum QStateUni {
   Disabled,
