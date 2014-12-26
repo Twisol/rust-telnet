@@ -1,17 +1,6 @@
-use std::collections::{VecMap};
-use std::cell::{RefCell};
 use dispatch::{DataEndpoint, CommandEndpoint};
 use qstate::{QState, QAttitude};
-
-#[allow(non_snake_case)]
-pub mod IAC {
-  pub const SE: u8 = 240;
-  pub const SB: u8 = 250;
-  pub const WILL: u8 = 251;
-  pub const WONT: u8 = 252;
-  pub const DO: u8 = 253;
-  pub const DONT: u8 = 254;
-}
+use iac::IAC;
 
 pub trait ChannelEndpoint {
   fn on_data<'a>(&mut self, _: Option<u8>, _: &'a [u8]) {}
@@ -23,8 +12,14 @@ pub trait ChannelEndpoint {
   fn should_enable(&mut self, _: QAttitude) -> bool { false }
 }
 pub trait TelnetDemuxVisitor {
-  fn channel_handler(&mut self, _channel: Option<u8>, _scope: &Fn(&mut ChannelEndpoint));
+  fn channel_handler(&mut self, _channel: Option<u8>, scope: &Fn(&mut ChannelEndpoint)) {
+    scope.call((&mut (),));
+  }
 }
+
+impl ChannelEndpoint for () {}
+impl TelnetDemuxVisitor for () {}
+
 
 pub struct TelnetDemuxState {
   pub qstate: [QState, ..256],
@@ -37,11 +32,18 @@ impl TelnetDemuxState {
       active_channel: None,
     }
   }
+
+  pub fn visit<'a>(&'a mut self, visitor: &'a mut (TelnetDemuxVisitor + 'a)) -> TelnetDemux<'a> {
+    TelnetDemux {
+      context: visitor,
+      state: self,
+    }
+  }
 }
 
 pub struct TelnetDemux<'a> {
-  pub context: &'a mut (TelnetDemuxVisitor + 'a),
-  pub state: &'a mut TelnetDemuxState,
+  context: &'a mut (TelnetDemuxVisitor + 'a),
+  state: &'a mut TelnetDemuxState,
 }
 impl<'a> CommandEndpoint for TelnetDemux<'a> {
   fn on_command(&mut self, channel: Option<u8>, command: u8) {
@@ -56,7 +58,7 @@ impl<'a> CommandEndpoint for TelnetDemux<'a> {
               handler.on_blur(prev_channel);
             });
           },
-          _  => {},
+          _ => {},
         }
       },
       Some(ch) => {
@@ -66,15 +68,12 @@ impl<'a> CommandEndpoint for TelnetDemux<'a> {
           IAC::DO   => println!("IAC DO {}", ch),
           IAC::DONT => println!("IAC DONT {}", ch),
           IAC::SB   => {
-            let ref qstate = self.state.qstate[ch as uint];
-            if true { //qstate.is_active(QAttitude::Local) || qstate.is_active(QAttitude::Remote) {
-              self.state.active_channel = channel;
-              self.context.channel_handler(channel, &|handler| {
-                handler.on_focus(channel);
-              });
-            }
+            self.state.active_channel = channel;
+            self.context.channel_handler(channel, &|handler| {
+              handler.on_focus(channel);
+            });
           },
-          _    => {},
+          _ => {},
         }
       }
     };
