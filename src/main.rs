@@ -3,7 +3,7 @@
 
 use std::cell::{RefCell};
 use parser::{TelnetTokenizer};
-use dispatch::{TelnetDispatch, CommandEndpoint};
+use dispatch::{TelnetDispatch, DataEndpoint, CommandEndpoint, TelnetDispatchVisitor};
 use demux::{TelnetDemux, ChannelEndpoint, IAC};
 
 mod parser;
@@ -41,31 +41,51 @@ impl ChannelEndpoint for Main {
 }
 
 
+impl DataEndpoint for () {}
+impl CommandEndpoint for () {}
+impl ChannelEndpoint for () {}
+static mut DEFAULT_HANDLER: () = ();
+
+struct Blargh<'a> {
+  negotiator: TelnetDemux<'a>,
+  foo: Foo,
+}
+impl<'b> TelnetDispatchVisitor for Blargh<'b> {
+  fn data_handler<'a>(&'a mut self) -> &'a mut DataEndpoint {
+    &mut self.negotiator
+  }
+  fn command_handler<'a>(&'a mut self, command: u8) -> &'a mut CommandEndpoint {
+    match command {
+      IAC::WILL | IAC::WONT | IAC::DO | IAC::DONT | IAC::SB | IAC::SE => {
+        &mut self.negotiator
+      }
+      0x42 => {
+        &mut self.foo
+      }
+      _ => {
+        unsafe { &mut DEFAULT_HANDLER }
+      }
+    }
+  }
+}
+
 fn main() {
   let stream = [b"abc", b"def\xFF\xFA\x20hello, w\xFF\xFForld!\xFF", b"\xF0\xFF\x42"];
 
   let mut tokenizer = TelnetTokenizer::new();
-  let mut dispatch = TelnetDispatch::new();
+  let mut blargh = Blargh {
+    negotiator: TelnetDemux::new(),
+    foo: Foo(42),
+  };
 
-  let negotiator = RefCell::new(TelnetDemux::new());
-  dispatch.data = &negotiator;
-  dispatch.commands.insert(IAC::WILL, &negotiator);
-  dispatch.commands.insert(IAC::WONT, &negotiator);
-  dispatch.commands.insert(IAC::DO, &negotiator);
-  dispatch.commands.insert(IAC::DONT, &negotiator);
-  dispatch.commands.insert(IAC::SB, &negotiator);
-  dispatch.commands.insert(IAC::SE, &negotiator);
-
-  let foo = RefCell::new(Foo(42));
-  negotiator.borrow_mut().channels.insert(32, &foo);
-  dispatch.commands.insert(0x42, &foo);
+  //blargh.negotiator.channels.insert(32, &foo);
 
   let my_main = RefCell::new(Main);
-  negotiator.borrow_mut().main_channel = &my_main;
+  blargh.negotiator.main_channel = &my_main;
 
   for &data in stream.iter() {
     for token in tokenizer.tokenize(data) {
-      dispatch.dispatch(token);
+      (TelnetDispatch {context: &mut blargh}).dispatch(token);
     }
   }
 }

@@ -5,12 +5,12 @@ use qstate::{QState, QAttitude};
 
 #[allow(non_snake_case)]
 pub mod IAC {
-  pub const SE: uint = 240;
-  pub const SB: uint = 250;
-  pub const WILL: uint = 251;
-  pub const WONT: uint = 252;
-  pub const DO: uint = 253;
-  pub const DONT: uint = 254;
+  pub const SE: u8 = 240;
+  pub const SB: u8 = 250;
+  pub const WILL: u8 = 251;
+  pub const WONT: u8 = 252;
+  pub const DO: u8 = 253;
+  pub const DONT: u8 = 254;
 }
 
 pub trait ChannelEndpoint {
@@ -20,7 +20,7 @@ pub trait ChannelEndpoint {
   fn on_focus(&mut self, _: Option<u8>) {}
   fn on_blur(&mut self, _: Option<u8>) {}
 
-  fn should_enable(&mut self, _: QAttitude) { false }
+  fn should_enable(&mut self, _: QAttitude) -> bool { false }
 }
 pub trait PChannelEndpoint {
   fn _on_data<'a>(&self, _: Option<u8>, _: &'a [u8]) {}
@@ -29,7 +29,7 @@ pub trait PChannelEndpoint {
   fn _on_focus(&self, _: Option<u8>) {}
   fn _on_blur(&self, _: Option<u8>) {}
 
-  fn _should_enable(&self, _: QAttitude) { false }
+  fn _should_enable(&self, _: QAttitude) -> bool { false }
 }
 
 impl PChannelEndpoint for () {}
@@ -52,7 +52,7 @@ where T: ChannelEndpoint {
     self.borrow_mut().on_blur(channel);
   }
 
-  fn _should_enable(&self, attitude: QAttitude) {
+  fn _should_enable(&self, attitude: QAttitude) -> bool {
     self.borrow_mut().should_enable(attitude)
   }
 }
@@ -89,7 +89,7 @@ impl<'a> CommandEndpoint for TelnetDemux<'a> {
           None => { &DEFAULT_ENDPOINT as &PChannelEndpoint },
         };
 
-        match command as uint {
+        match command {
           IAC::SE => {
             endpoint._on_blur(self.active_channel);
             self.active_channel = channel;
@@ -103,7 +103,7 @@ impl<'a> CommandEndpoint for TelnetDemux<'a> {
           None => { &DEFAULT_ENDPOINT as &PChannelEndpoint }
         };
 
-        match command as uint {
+        match command {
           IAC::WILL => println!("IAC WILL {}", ch),
           IAC::WONT => println!("IAC WONT {}", ch),
           IAC::DO   => println!("IAC DO {}", ch),
