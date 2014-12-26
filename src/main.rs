@@ -39,27 +39,32 @@ where Parent: TelnetCommandVisitor + TelnetDemuxVisitor {
 }
 
 
-struct EndpointRegistry<'a> {
-  foo: &'a mut Foo,
-  main: &'a mut Main,
+struct EndpointRegistry<'a, Parent> {
+  pub parent: Parent,
+
+  pub foo: &'a mut Foo,
+  pub main: &'a mut Main,
 }
-impl<'a> TelnetCommandVisitor for EndpointRegistry<'a> {
+impl<'a, Parent> TelnetCommandVisitor for EndpointRegistry<'a, Parent>
+where Parent: TelnetCommandVisitor {
   fn command_handler(&mut self, command: u8, scope: &Fn(&mut CommandEndpoint)) {
     match command {
       0x42 => scope.call((self.foo,)),
-      _    => scope.call((&mut (),)),
+      _    => self.parent.command_handler(command, scope),
     }
   }
 }
-impl<'a> TelnetDemuxVisitor for EndpointRegistry<'a> {
+impl<'a, Parent> TelnetDemuxVisitor for EndpointRegistry<'a, Parent>
+where Parent: TelnetDemuxVisitor {
   fn channel_handler(&mut self, channel: Option<u8>, scope: &Fn(&mut ChannelEndpoint)) {
     match channel {
       None     => scope.call((self.main,)),
       Some(32) => scope.call((self.foo,)),
-      Some(_)  => scope.call((&mut (),)),
+      Some(_)  => self.parent.channel_handler(channel, scope),
     }
   }
 }
+
 
 struct Foo(u8);
 impl ChannelEndpoint for Foo {
@@ -105,6 +110,8 @@ fn main() {
     parent: EndpointRegistry {
       foo: &mut foo,
       main: &mut main_channel,
+
+      parent: (),
     }
   };
 
