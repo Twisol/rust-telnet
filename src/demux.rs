@@ -1,6 +1,7 @@
-use dispatch::{DataEndpoint, CommandEndpoint};
+use dispatch::{DataEndpoint};
+pub use dispatch::{CommandEndpoint};
 use qstate::{QState, QAttitude};
-use iac::IAC;
+use iac::{IAC};
 
 pub trait ChannelEndpoint {
   fn on_data<'a>(&mut self, _: Option<u8>, _: &'a [u8]) {}
@@ -9,16 +10,10 @@ pub trait ChannelEndpoint {
   fn on_focus(&mut self, _: Option<u8>) {}
   fn on_blur(&mut self, _: Option<u8>) {}
 
-  fn should_enable(&mut self, _: QAttitude) -> bool { false }
-}
-pub trait TelnetDemuxVisitor {
-  fn channel_handler(&mut self, _channel: Option<u8>, scope: &Fn(&mut ChannelEndpoint)) {
-    scope.call((&mut (),));
-  }
+  fn should_enable(&mut self, _: Option<u8>, _: QAttitude) -> bool { false }
 }
 
 impl ChannelEndpoint for () {}
-impl TelnetDemuxVisitor for () {}
 
 
 pub struct TelnetDemuxState {
@@ -32,33 +27,40 @@ impl TelnetDemuxState {
       active_channel: None,
     }
   }
+}
 
-  pub fn visit<'a>(&'a mut self, visitor: &'a mut (TelnetDemuxVisitor + 'a)) -> TelnetDemux<'a> {
+pub struct TelnetDemux<'a, Parent> {
+  parent: Parent,
+
+  state: &'a mut TelnetDemuxState,
+}
+impl<'b, Parent> TelnetDemux<'b, Parent> {
+  pub fn new(state: &'b mut TelnetDemuxState, parent: Parent) -> TelnetDemux<'b, Parent> {
     TelnetDemux {
-      context: visitor,
-      state: self,
+      state: state,
+      parent: parent,
     }
   }
 }
-
-pub struct TelnetDemux<'a> {
-  context: &'a mut (TelnetDemuxVisitor + 'a),
-  state: &'a mut TelnetDemuxState,
+impl<'b, Parent> DataEndpoint for TelnetDemux<'b, Parent>
+where Parent: ChannelEndpoint {
+  fn on_data<'a>(&mut self, data: &'a [u8]) {
+    self.parent.on_data(self.state.active_channel, data);
+  }
 }
-impl<'a> CommandEndpoint for TelnetDemux<'a> {
+impl<'b, Parent> CommandEndpoint for TelnetDemux<'b, Parent>
+where Parent: CommandEndpoint + ChannelEndpoint {
   fn on_command(&mut self, channel: Option<u8>, command: u8) {
     match channel {
       None => {
         match command {
           IAC::SE => {
-            let prev_channel = self.state.active_channel;
+            self.parent.on_blur(self.state.active_channel);
             self.state.active_channel = channel;
-
-            self.context.channel_handler(prev_channel, &|handler| {
-              handler.on_blur(prev_channel);
-            });
           },
-          _ => {},
+          _ => {
+            self.parent.on_command(channel, command)
+          },
         }
       },
       Some(ch) => {
@@ -68,22 +70,14 @@ impl<'a> CommandEndpoint for TelnetDemux<'a> {
           IAC::DO   => println!("IAC DO {}", ch),
           IAC::DONT => println!("IAC DONT {}", ch),
           IAC::SB   => {
+            self.parent.on_focus(channel);
             self.state.active_channel = channel;
-            self.context.channel_handler(channel, &|handler| {
-              handler.on_focus(channel);
-            });
           },
-          _ => {},
+          _ => {
+            self.parent.on_command(channel, command)
+          },
         }
       }
-    };
-  }
-}
-impl<'a> DataEndpoint for TelnetDemux<'a> {
-  fn on_data<'b>(&mut self, data: &'b [u8]) {
-    let active_channel = self.state.active_channel;
-    self.context.channel_handler(active_channel, &|handler| {
-      handler.on_data(active_channel, data);
-    });
+    }
   }
 }
