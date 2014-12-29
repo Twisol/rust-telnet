@@ -30,20 +30,19 @@ impl TelnetDemuxState {
   }
 }
 
-pub struct TelnetDemux<'a, Parent> {
-  parent: Parent,
-
-  state: &'a mut TelnetDemuxState,
+pub struct TelnetDemux<'state, 'parent, Parent: 'parent> {
+  parent: &'parent mut Parent,
+  state: &'state mut TelnetDemuxState,
 }
-impl<'b, Parent> TelnetDemux<'b, Parent> {
-  pub fn new(state: &'b mut TelnetDemuxState, parent: Parent) -> TelnetDemux<'b, Parent> {
+impl<'state, 'parent, Parent> TelnetDemux<'state, 'parent, Parent> {
+  pub fn new(state: &'state mut TelnetDemuxState, parent: &'parent mut Parent) -> TelnetDemux<'state, 'parent, Parent> {
     TelnetDemux {
       state: state,
       parent: parent,
     }
   }
 }
-impl<'b, Parent> DispatchHandler for TelnetDemux<'b, Parent>
+impl<'state, 'parent, Parent> DispatchHandler for TelnetDemux<'state, 'parent, Parent>
 where Parent: ChannelHandler {
   fn on_data<'a>(&mut self, data: &'a [u8]) {
     self.parent.on_data(self.state.active_channel, data);

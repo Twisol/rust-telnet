@@ -4,7 +4,7 @@
 use parser::{TelnetTokenizer};
 use dispatch::{DispatchExt};
 use demux::{TelnetDemuxState, TelnetDemux};
-use registry::{EndpointRegistry, ChannelHandler};
+use registry::{EndpointRegistry, ChannelHandler, SomeThing};
 
 mod parser;
 mod dispatch;
@@ -14,24 +14,47 @@ mod registry;
 mod qstate;
 mod iac;
 
-
+trait MyWritable {
+  fn mywrite(&mut self, _s: String);
+}
 
 struct Foo(u8);
-impl ChannelHandler for Foo {
+impl<Parent> SomeThing<Parent> for Foo
+where Parent: MyWritable {
+  fn visit(&mut self, parent: &mut Parent, scope: &Fn(&mut ChannelHandler)) {
+    scope.call((&mut FooThing {
+      parent: parent,
+      state: self,
+    },))
+  }
+  fn ask(&mut self, parent: &mut Parent, scope: &Fn(&mut ChannelHandler) -> bool) -> bool {
+    scope.call((&mut FooThing {
+      parent: parent,
+      state: self,
+    },))
+  }
+}
+
+struct FooThing<'state, 'parent, Parent: 'parent> {
+  parent: &'parent mut Parent,
+  state: &'state mut Foo,
+}
+impl<'state, 'parent, Parent> ChannelHandler for FooThing<'state, 'parent, Parent>
+where Parent: MyWritable {
   fn on_data<'b>(&mut self, _channel: Option<u8>, text: &'b [u8]) {
-    self.0 += 1;
-    println!("[FOO]: {} {}", self.0, text);
+    self.state.0 += 1;
+    self.parent.mywrite(format!("[FOO]: {} {}", self.state.0, text));
   }
   fn on_command(&mut self, _channel: Option<u8>, _command: u8) {
-    self.0 += 1;
-    println!("TEST TEST {}", self.0);
+    self.state.0 += 1;
+    self.parent.mywrite(format!("TEST TEST {}", self.state.0));
   }
 
   fn on_focus(&mut self, _channel: Option<u8>) {
-    println!("[FOO] <focus>");
+    self.parent.mywrite(format!("[FOO] <focus>"));
   }
   fn on_blur(&mut self, _channel: Option<u8>) {
-    println!("[FOO] <blur>");
+    self.parent.mywrite(format!("[FOO] <blur>"));
   }
 }
 
@@ -43,12 +66,28 @@ impl ChannelHandler for Main {
   }
 }
 
+
+struct Output {
+  out: String,
+}
+impl MyWritable for Output {
+  fn mywrite(&mut self, s: String) {
+    self.out.push_str(&*s);
+    self.out.push_str("\r\n");
+  }
+}
+impl ChannelHandler for Output {}
+
 fn main() {
   let stream = [
     b"abcdef\xFF\xFA\x20h",
     b"ello",
     b", world!\xFF\xF0\xFF\x42\xFF\xFE\x42"
   ];
+
+  let mut output = Output {
+    out: String::new(),
+  };
 
   let mut tokenizer = TelnetTokenizer::new();
 
@@ -59,17 +98,18 @@ fn main() {
   for &data in stream.iter() {
     for token in tokenizer.tokenize(data) {
       // Construct an event context
-
-      let mut registry = EndpointRegistry::new(());
+      let mut registry = EndpointRegistry::new(&mut output);
       registry.main = Some(&mut main_channel as &mut ChannelHandler);
       registry.endpoints.push(&mut foo);
       registry.command_map.insert(0x42, registry.endpoints.len() - 1);
       registry.channel_map.insert(32, registry.endpoints.len() - 1);
 
-      let mut demux = TelnetDemux::new(&mut demux, registry);
+      let mut demux = TelnetDemux::new(&mut demux, &mut registry);
 
       // Dispatch the event
       demux.dispatch(token);
     }
   }
+
+  println!("\r\nBuffered output:\r\n{}", output.out);
 }
