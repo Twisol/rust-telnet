@@ -2,8 +2,9 @@
 //#![allow(dead_code)]
 
 use parser::{TelnetTokenizer};
+use dispatch::{DispatchExt};
 use demux::{TelnetDemuxState, TelnetDemux};
-use registry::{EndpointRegistry, TelnetEndpoint};
+use registry::{EndpointRegistry, ChannelHandler};
 
 mod parser;
 mod dispatch;
@@ -16,7 +17,7 @@ mod iac;
 
 
 struct Foo(u8);
-impl TelnetEndpoint for Foo {
+impl ChannelHandler for Foo {
   fn on_data<'b>(&mut self, _channel: Option<u8>, text: &'b [u8]) {
     self.0 += 1;
     println!("[FOO]: {} {}", self.0, text);
@@ -36,7 +37,7 @@ impl TelnetEndpoint for Foo {
 
 
 struct Main;
-impl TelnetEndpoint for Main {
+impl ChannelHandler for Main {
   fn on_data<'b>(&mut self, _channel: Option<u8>, text: &'b [u8]) {
     println!("[M]: {}", text);
   }
@@ -60,7 +61,7 @@ fn main() {
       // Construct an event context
 
       let mut registry = EndpointRegistry::new(());
-      registry.main = Some(&mut main_channel as &mut TelnetEndpoint);
+      registry.main = Some(&mut main_channel as &mut ChannelHandler);
       registry.endpoints.push(&mut foo);
       registry.command_map.insert(0x42, registry.endpoints.len() - 1);
       registry.channel_map.insert(32, registry.endpoints.len() - 1);
@@ -68,7 +69,7 @@ fn main() {
       let mut demux = TelnetDemux::new(&mut demux, registry);
 
       // Dispatch the event
-      dispatch::dispatch(token, &mut demux);
+      demux.dispatch(token);
     }
   }
 }

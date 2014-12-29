@@ -1,19 +1,20 @@
-use dispatch::{DataEndpoint};
-pub use dispatch::{CommandEndpoint};
+use dispatch::{DispatchHandler};
 use qstate::{QState, QAttitude};
 use iac::{IAC};
 
-pub trait ChannelEndpoint {
-  fn on_data<'a>(&mut self, _: Option<u8>, _: &'a [u8]) {}
-  fn on_enable(&mut self, _: Option<u8>) {}
-  fn on_disable(&mut self, _: Option<u8>) {}
-  fn on_focus(&mut self, _: Option<u8>) {}
-  fn on_blur(&mut self, _: Option<u8>) {}
+pub trait ChannelHandler {
+  fn on_data<'a>(&mut self, _channel: Option<u8>, _data: &'a [u8]) {}
+  fn on_command(&mut self, _channel: Option<u8>, _command: u8) {}
 
-  fn should_enable(&mut self, _: Option<u8>, _: QAttitude) -> bool { false }
+  fn on_enable(&mut self, _channel: Option<u8>) {}
+  fn on_disable(&mut self, _channel: Option<u8>) {}
+  fn on_focus(&mut self, _channel: Option<u8>) {}
+  fn on_blur(&mut self, _channel: Option<u8>) {}
+
+  fn should_enable(&mut self, _channel: Option<u8>, _attitude: QAttitude) -> bool { false }
 }
 
-impl ChannelEndpoint for () {}
+impl ChannelHandler for () {}
 
 
 pub struct TelnetDemuxState {
@@ -42,14 +43,12 @@ impl<'b, Parent> TelnetDemux<'b, Parent> {
     }
   }
 }
-impl<'b, Parent> DataEndpoint for TelnetDemux<'b, Parent>
-where Parent: ChannelEndpoint {
+impl<'b, Parent> DispatchHandler for TelnetDemux<'b, Parent>
+where Parent: ChannelHandler {
   fn on_data<'a>(&mut self, data: &'a [u8]) {
     self.parent.on_data(self.state.active_channel, data);
   }
-}
-impl<'b, Parent> CommandEndpoint for TelnetDemux<'b, Parent>
-where Parent: CommandEndpoint + ChannelEndpoint {
+
   fn on_command(&mut self, channel: Option<u8>, command: u8) {
     match channel {
       None => {

@@ -1,33 +1,19 @@
 use std::collections::{HashMap};
 use std::vec::{Vec};
-use demux::{ChannelEndpoint, CommandEndpoint};
+pub use demux::{ChannelHandler};
 use qstate::{QAttitude};
-
-pub trait TelnetEndpoint {
-  fn on_data<'a>(&mut self, _: Option<u8>, _: &'a [u8]) {}
-  fn on_command(&mut self, _: Option<u8>, _: u8) {}
-
-  fn on_enable(&mut self, _: Option<u8>) {}
-  fn on_disable(&mut self, _: Option<u8>) {}
-  fn on_focus(&mut self, _: Option<u8>) {}
-  fn on_blur(&mut self, _: Option<u8>) {}
-
-  fn should_enable(&mut self, _: Option<u8>, _: QAttitude) -> bool { false }
-}
-impl TelnetEndpoint for () {}
-
 
 pub struct EndpointRegistry<'b, Parent> {
   pub parent: Parent,
 
   pub command_map: HashMap<u8, uint>,
   pub channel_map: HashMap<u8, uint>,
-  pub endpoints: Vec<&'b mut (TelnetEndpoint + 'b)>,
+  pub endpoints: Vec<&'b mut (ChannelHandler + 'b)>,
 
-  pub main: Option<&'b mut (TelnetEndpoint + 'b)>,
+  pub main: Option<&'b mut (ChannelHandler + 'b)>,
 }
 impl<'b, Parent> EndpointRegistry<'b, Parent>
-where Parent: TelnetEndpoint {
+where Parent: ChannelHandler {
   pub fn new(parent: Parent) -> EndpointRegistry<'b, Parent> {
     EndpointRegistry {
       command_map: HashMap::new(),
@@ -39,14 +25,14 @@ where Parent: TelnetEndpoint {
     }
   }
 
-  fn _get_command_handler<'a>(&'a mut self, command: u8) -> &'a mut TelnetEndpoint {
+  fn _get_command_handler<'a>(&'a mut self, command: u8) -> &'a mut ChannelHandler {
     match self.command_map.get(&command) {
       Some(&id) => *self.endpoints.get_mut(id).unwrap(),
       None => &mut self.parent,
     }
   }
 
-  fn _get_channel_handler<'a>(&'a mut self, channel: Option<u8>) -> &'a mut TelnetEndpoint {
+  fn _get_channel_handler<'a>(&'a mut self, channel: Option<u8>) -> &'a mut ChannelHandler {
     match channel {
       None => {
         match self.main {
@@ -64,17 +50,15 @@ where Parent: TelnetEndpoint {
   }
 }
 
-impl<'b, Parent> CommandEndpoint for EndpointRegistry<'b, Parent>
-where Parent: TelnetEndpoint {
-  fn on_command(&mut self, channel: Option<u8>, command: u8) {
-    self._get_command_handler(command).on_command(channel, command);
-  }
-}
-impl<'b, Parent> ChannelEndpoint for EndpointRegistry<'b, Parent>
-where Parent: TelnetEndpoint {
+impl<'b, Parent> ChannelHandler for EndpointRegistry<'b, Parent>
+where Parent: ChannelHandler {
   fn on_data<'a>(&mut self, channel: Option<u8>, data: &'a [u8]) {
     self._get_channel_handler(channel).on_data(channel, data);
   }
+  fn on_command(&mut self, channel: Option<u8>, command: u8) {
+    self._get_command_handler(command).on_command(channel, command);
+  }
+
   fn on_enable(&mut self, channel: Option<u8>) {
     self._get_channel_handler(channel).on_enable(channel);
   }

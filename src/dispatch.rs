@@ -1,34 +1,31 @@
 use parser::{TelnetToken};
 
 
-pub trait DataEndpoint {
+pub trait DispatchHandler {
   fn on_data<'a>(&mut self, _data: &'a [u8]) {}
+  fn on_command(&mut self, _channel: Option<u8>, _command: u8) {}
 }
-impl DataEndpoint for () {}
+impl DispatchHandler for () {}
 
-pub trait CommandEndpoint {
-  fn on_command(&mut self, _: Option<u8>, _: u8) {}
+
+pub trait DispatchExt {
+  fn dispatch(&mut self, token: TelnetToken);
 }
-impl CommandEndpoint for () {}
 
-// Trait alias
-pub trait DispatchEndpoint: DataEndpoint + CommandEndpoint {}
-impl<T> DispatchEndpoint for T where T: DataEndpoint + CommandEndpoint {}
+impl<T: DispatchHandler> DispatchExt for T {
+  fn dispatch(&mut self, token: TelnetToken) {
+    match token {
+      TelnetToken::Text(text) => {
+        self.on_data(text);
+      }
 
+      TelnetToken::Command(command) => {
+        self.on_command(None, command);
+      }
 
-pub fn dispatch<T>(token: TelnetToken, handler: &mut T)
-where T: DispatchEndpoint {
-  match token {
-    TelnetToken::Text(text) => {
-      handler.on_data(text);
-    }
-
-    TelnetToken::Command(command) => {
-      handler.on_command(None, command);
-    }
-
-    TelnetToken::Negotiation{command, channel} => {
-      handler.on_command(Some(channel), command);
+      TelnetToken::Negotiation{command, channel} => {
+        self.on_command(Some(channel), command);
+      }
     }
   }
 }
