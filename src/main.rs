@@ -45,9 +45,9 @@ where Parent: MyWritable {
     self.state.0 += 1;
     self.parent.mywrite(format!("[FOO]: {} {}", self.state.0, text));
   }
-  fn on_command(&mut self, _channel: Option<u8>, _command: u8) {
+  fn on_command(&mut self, _channel: Option<u8>, command: u8) {
     self.state.0 += 1;
-    self.parent.mywrite(format!("TEST TEST {}", self.state.0));
+    self.parent.mywrite(format!("[FOO] {} {}", self.state.0, command));
   }
 
   fn on_focus(&mut self, _channel: Option<u8>) {
@@ -60,9 +60,32 @@ where Parent: MyWritable {
 
 
 struct Main;
-impl ChannelHandler for Main {
+impl<Parent> SomeThing<Parent> for Main
+where Parent: MyWritable {
+  fn visit(&mut self, parent: &mut Parent, scope: &Fn(&mut ChannelHandler)) {
+    scope.call((&mut MainThing {
+      parent: parent,
+      state: self,
+    },))
+  }
+  fn ask(&mut self, parent: &mut Parent, scope: &Fn(&mut ChannelHandler) -> bool) -> bool {
+    scope.call((&mut MainThing {
+      parent: parent,
+      state: self,
+    },))
+  }
+}
+
+struct MainThing<'state, 'parent, Parent: 'parent> {
+  parent: &'parent mut Parent,
+
+  #[allow(dead_code)]
+  state: &'state mut Main,
+}
+impl<'state, 'parent, Parent> ChannelHandler for MainThing<'state, 'parent, Parent>
+where Parent: MyWritable {
   fn on_data<'b>(&mut self, _channel: Option<u8>, text: &'b [u8]) {
-    println!("[M]: {}", text);
+    self.parent.mywrite(format!("[M]: {}", text));
   }
 }
 
@@ -79,12 +102,6 @@ impl MyWritable for Output {
 impl ChannelHandler for Output {}
 
 fn main() {
-  let stream = [
-    b"abcdef\xFF\xFA\x20h",
-    b"ello",
-    b", world!\xFF\xF0\xFF\x42\xFF\xFE\x42"
-  ];
-
   let mut output = Output {
     out: String::new(),
   };
@@ -95,14 +112,20 @@ fn main() {
   let mut foo = Foo(42);
   let mut main_channel = Main;
 
+
+  let stream = [
+    b"abcdef\xFF\xFA\x20h",
+    b"ello",
+    b", world!\xFF\xF0\xFF\x42\xFF\xFE\x42"
+  ];
   for &data in stream.iter() {
     for token in tokenizer.tokenize(data) {
       // Construct an event context
       let mut registry = EndpointRegistry::new(&mut output);
-      registry.main = Some(&mut main_channel as &mut ChannelHandler);
+      registry.main = Some(&mut main_channel as &mut SomeThing<_>);
       registry.endpoints.push(&mut foo);
       registry.command_map.insert(0x42, registry.endpoints.len() - 1);
-      registry.channel_map.insert(32, registry.endpoints.len() - 1);
+      registry.channel_map.insert(0x20, registry.endpoints.len() - 1);
 
       let mut demux = TelnetDemux::new(&mut demux, &mut registry);
 

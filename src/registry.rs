@@ -23,7 +23,7 @@ pub struct EndpointRegistry<'parent, Parent: 'parent> {
   pub channel_map: HashMap<u8, uint>,
   pub endpoints: Vec<&'parent mut (SomeThing<Parent> + 'parent)>,
 
-  pub main: Option<&'parent mut (ChannelHandler + 'parent)>,
+  pub main: Option<&'parent mut (SomeThing<Parent> + 'parent)>,
 }
 impl<'parent, Parent> EndpointRegistry<'parent, Parent>
 where Parent: ChannelHandler {
@@ -49,7 +49,7 @@ where Parent: ChannelHandler {
     match channel {
       None => {
         match self.main {
-          Some(ref mut endpoint) => scope.call((*endpoint,)),
+          Some(ref mut endpoint) => endpoint.visit(self.parent, scope),
           None => (&mut ()).visit(self.parent, scope),
         }
       },
@@ -66,7 +66,7 @@ where Parent: ChannelHandler {
     match channel {
       None => {
         match self.main {
-          Some(ref mut endpoint) => scope.call((*endpoint,)),
+          Some(ref mut endpoint) => endpoint.ask(self.parent, scope),
           None => (&mut ()).ask(self.parent, scope),
         }
       },
