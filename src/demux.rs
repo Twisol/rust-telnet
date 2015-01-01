@@ -17,6 +17,7 @@ pub trait ChannelHandler {
 impl ChannelHandler for () {}
 
 
+#[deriving(Copy)]
 pub struct TelnetDemuxState {
   pub qstate: [QState, ..256],
   pub active_channel: Option<u8>,
