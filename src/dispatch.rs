@@ -12,7 +12,8 @@ pub trait DispatchExt {
   fn dispatch(&mut self, token: TelnetToken);
 }
 
-impl<T: DispatchHandler> DispatchExt for T {
+impl<T> DispatchExt for T
+where T: DispatchHandler {
   fn dispatch(&mut self, token: TelnetToken) {
     match token {
       TelnetToken::Text(text) => {
