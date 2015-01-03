@@ -1,7 +1,9 @@
 use std::collections::{HashMap};
 use std::vec::{Vec};
+use carrier::{Carrier};
 pub use demux::{ChannelHandler};
 use qstate::{QAttitude};
+
 
 pub trait TelnetChannel<Parent> {
   fn on_data<'a>(&mut self, _parent: &mut Parent, _channel: Option<u8>, _data: &'a [u8]) {}
@@ -17,32 +19,56 @@ pub trait TelnetChannel<Parent> {
 
 impl<Parent> TelnetChannel<Parent> for ()
 where Parent: ChannelHandler {
-  fn on_data<'a>(&mut self, parent: &mut Parent, channel: Option<u8>, data: &'a [u8]) {
-    parent.on_data(channel, data)
+  fn on_data<'a>(&mut self, parent: &mut Parent, channel: Option<u8>, text: &'a [u8]) {
+    Carrier{parent: parent, state: self}.on_data(channel, text)
   }
   fn on_command(&mut self, parent: &mut Parent, channel: Option<u8>, command: u8) {
-    parent.on_command(channel, command)
+    Carrier{parent: parent, state: self}.on_command(channel, command)
   }
-
   fn on_enable(&mut self, parent: &mut Parent, channel: Option<u8>) {
-    parent.on_enable(channel)
+    Carrier{parent: parent, state: self}.on_enable(channel)
   }
   fn on_disable(&mut self, parent: &mut Parent, channel: Option<u8>) {
-    parent.on_disable(channel)
+    Carrier{parent: parent, state: self}.on_disable(channel)
   }
   fn on_focus(&mut self, parent: &mut Parent, channel: Option<u8>) {
-    parent.on_focus(channel)
+    Carrier{parent: parent, state: self}.on_focus(channel)
   }
   fn on_blur(&mut self, parent: &mut Parent, channel: Option<u8>) {
-    parent.on_blur(channel)
+    Carrier{parent: parent, state: self}.on_focus(channel)
+  }
+  fn should_enable(&mut self, parent: &mut Parent, channel: Option<u8>, attitude: QAttitude) -> bool {
+    Carrier{parent: parent, state: self}.should_enable(channel, attitude)
+  }
+}
+impl<'parent, 'state, Parent> ChannelHandler for Carrier<'parent, 'state, Parent, ()>
+where Parent: ChannelHandler {
+  fn on_data<'a>(&mut self, channel: Option<u8>, data: &'a [u8]) {
+    self.parent.on_data(channel, data)
+  }
+  fn on_command(&mut self, channel: Option<u8>, command: u8) {
+    self.parent.on_command(channel, command)
   }
 
-  fn should_enable(&mut self, parent: &mut Parent, channel: Option<u8>, attitude: QAttitude) -> bool {
-    parent.should_enable(channel, attitude)
+  fn on_enable(&mut self, channel: Option<u8>) {
+    self.parent.on_enable(channel)
+  }
+  fn on_disable(&mut self, channel: Option<u8>) {
+    self.parent.on_disable(channel)
+  }
+  fn on_focus(&mut self, channel: Option<u8>) {
+    self.parent.on_focus(channel)
+  }
+  fn on_blur(&mut self, channel: Option<u8>) {
+    self.parent.on_blur(channel)
+  }
+
+  fn should_enable(&mut self, channel: Option<u8>, attitude: QAttitude) -> bool {
+    self.parent.should_enable(channel, attitude)
   }
 }
 
-
+// Routes command and channel events to the appropriate handlers.
 pub struct EndpointRegistry<'parent, Parent: 'parent> {
   pub parent: &'parent mut Parent,
 
