@@ -1,3 +1,4 @@
+use carrier::{Carrier};
 use dispatch::{DispatchHandler};
 use qstate::{QState, QAttitude};
 use iac::{IAC};
@@ -17,33 +18,21 @@ pub trait ChannelHandler {
 impl ChannelHandler for () {}
 
 
-#[deriving(Copy)]
+#[derive(Copy)]
 pub struct TelnetDemuxState {
-  pub qstate: [QState, ..256],
+  pub qstate: [QState; 256],
   pub active_channel: Option<u8>,
 }
 impl TelnetDemuxState {
   pub fn new() -> TelnetDemuxState {
     TelnetDemuxState {
-      qstate: [QState::new(), ..256],
+      qstate: [QState::new(); 256],
       active_channel: None,
     }
   }
 }
 
-pub struct TelnetDemux<'state, 'parent, Parent: 'parent> {
-  parent: &'parent mut Parent,
-  state: &'state mut TelnetDemuxState,
-}
-impl<'state, 'parent, Parent> TelnetDemux<'state, 'parent, Parent> {
-  pub fn new(state: &'state mut TelnetDemuxState, parent: &'parent mut Parent) -> TelnetDemux<'state, 'parent, Parent> {
-    TelnetDemux {
-      state: state,
-      parent: parent,
-    }
-  }
-}
-impl<'state, 'parent, Parent> DispatchHandler for TelnetDemux<'state, 'parent, Parent>
+impl<'state, 'parent, Parent> DispatchHandler for Carrier<'state, 'parent, Parent, TelnetDemuxState>
 where Parent: ChannelHandler {
   fn on_data<'a>(&mut self, data: &'a [u8]) {
     self.parent.on_data(self.state.active_channel, data);

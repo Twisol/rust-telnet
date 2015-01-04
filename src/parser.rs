@@ -1,6 +1,6 @@
 use self::ParseState::*;
 
-#[deriving(Copy, Show)]
+#[derive(Copy, Show)]
 pub enum ParseState {
   Neutral,
   Carriage,
@@ -8,7 +8,7 @@ pub enum ParseState {
   Subchannel(u8),
 }
 
-#[deriving(Show)]
+#[derive(Show)]
 pub enum TelnetToken<'a> {
   Text(&'a [u8]),
   Command(u8),
