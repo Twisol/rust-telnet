@@ -129,7 +129,9 @@ impl<'a, 'b> TokenStream<'a, 'b> {
   }
 }
 
-impl<'a, 'b> Iterator<TelnetToken<'b>> for TokenStream<'a, 'b> {
+impl<'a, 'b> Iterator for TokenStream<'a, 'b> {
+  type Item = TelnetToken<'b>;
+
   fn next(&mut self) -> Option<TelnetToken<'b>> {
     while !self.data.is_empty() {
       let token = self.step_parser();

@@ -1,4 +1,4 @@
-#![feature(slicing_syntax, globs, unboxed_closures)]
+#![feature(slicing_syntax, globs, unboxed_closures, associated_types)]
 
 pub mod carrier;
 
