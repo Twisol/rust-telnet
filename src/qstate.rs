@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-#[derive(Show, Copy, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum QStateUni {
   Disabled,
   AwaitEnable,
@@ -18,13 +18,13 @@ impl QStateUni {
   }
 }
 
-#[derive(Show, Copy)]
+#[derive(Debug, Copy, Clone)]
 pub enum QAttitude {
   Local,
   Remote,
 }
 
-#[derive(Show, Copy)]
+#[derive(Debug, Copy, Clone)]
 pub struct QState {
   pub local: QStateUni,
   pub remote: QStateUni,

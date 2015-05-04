@@ -18,15 +18,15 @@ pub trait ChannelHandler {
 impl ChannelHandler for () {}
 
 
-#[derive(Copy)]
+#[derive(Clone)]
 pub struct TelnetDemuxState {
-  pub qstate: [QState; 256],
+  pub qstate: Vec<QState>,
   pub active_channel: Option<u8>,
 }
 impl TelnetDemuxState {
   pub fn new() -> TelnetDemuxState {
     TelnetDemuxState {
-      qstate: [QState::new(); 256],
+      qstate: vec![QState::new(); 256],
       active_channel: None,
     }
   }

@@ -1,6 +1,6 @@
 use self::ParseState::*;
 
-#[derive(Copy, Show)]
+#[derive(Copy, Clone, Debug)]
 pub enum ParseState {
   Neutral,
   Carriage,
@@ -8,7 +8,7 @@ pub enum ParseState {
   Subchannel(u8),
 }
 
-#[derive(Show)]
+#[derive(Debug)]
 pub enum TelnetToken<'a> {
   Text(&'a [u8]),
   Command(u8),
@@ -29,7 +29,7 @@ impl TelnetTokenizer {
   pub fn new() -> TelnetTokenizer {
     TelnetTokenizer {
       state: ParseState::Neutral,
-      is_long_command: box |cmd| 250 <= cmd && cmd <= 254,
+      is_long_command: Box::new(|cmd| 250 <= cmd && cmd <= 254),
     }
   }
 
@@ -52,27 +52,27 @@ type ParseResult<'b> = (Option<TelnetToken<'b>>, ParseState, &'b [u8]);
 impl<'a, 'b> TokenStream<'a, 'b> {
   fn carriage_state(&self) -> ParseResult<'b> {
     if self.data[0] == b'\n' {
-      (Some(TelnetToken::Text(b"\r\n")), Neutral, self.data[1..])
+      (Some(TelnetToken::Text(b"\r\n")), Neutral, &self.data[1..])
     } else if self.data[0] == b'\0' {
-      (Some(TelnetToken::Text(b"\r")), Neutral, self.data[1..])
+      (Some(TelnetToken::Text(b"\r")), Neutral, &self.data[1..])
     } else {
       // invalid stream, technically, but still unambiguous
-      (Some(TelnetToken::Text(b"\r")), Neutral, self.data)
+      (Some(TelnetToken::Text(b"\r")), Neutral, &self.data)
     }
   }
 
   fn command_state(&self) -> ParseResult<'b> {
-    if (*self.context.is_long_command).call((self.data[0],)) {
-      (None, Subchannel(self.data[0]), self.data[1..])
+    if (*self.context.is_long_command)(self.data[0]) {
+      (None, Subchannel(self.data[0]), &self.data[1..])
     } else if self.data[0] == b'\xFF' {
-      (Some(TelnetToken::Text(b"\xFF")), Neutral, self.data[1..])
+      (Some(TelnetToken::Text(b"\xFF")), Neutral, &self.data[1..])
     } else {
-      (Some(TelnetToken::Command(self.data[0])), Neutral, self.data[1..])
+      (Some(TelnetToken::Command(self.data[0])), Neutral, &self.data[1..])
     }
   }
 
   fn subchannel_state(&self, command: u8) -> ParseResult<'b> {
-    (Some(TelnetToken::Negotiation{command: command, channel: self.data[0]}), Neutral, self.data[1..])
+    (Some(TelnetToken::Negotiation{command: command, channel: self.data[0]}), Neutral, &self.data[1..])
   }
 
   fn neutral_state(&self) -> ParseResult<'b> {
@@ -85,7 +85,7 @@ impl<'a, 'b> TokenStream<'a, 'b> {
         let token = if idx == 0 {
           None
         } else {
-          Some(TelnetToken::Text(self.data[0..idx]))
+          Some(TelnetToken::Text(&self.data[0..idx]))
         };
 
         let state = if self.data[idx] == b'\r' {
@@ -94,7 +94,7 @@ impl<'a, 'b> TokenStream<'a, 'b> {
           Command
         };
 
-        (token, state, self.data[idx+1..])
+        (token, state, &self.data[idx+1..])
       }
       None => {
         // This whole data block is text.

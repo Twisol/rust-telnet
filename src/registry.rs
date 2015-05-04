@@ -72,8 +72,8 @@ where Parent: ChannelHandler {
 pub struct EndpointRegistry<'parent, Parent: 'parent> {
   pub parent: &'parent mut Parent,
 
-  pub command_map: HashMap<u8, uint>,
-  pub channel_map: HashMap<u8, uint>,
+  pub command_map: HashMap<u8, usize>,
+  pub channel_map: HashMap<u8, usize>,
   pub endpoints: Vec<&'parent mut (TelnetChannel<Parent> + 'parent)>,
 
   pub main: Option<&'parent mut (TelnetChannel<Parent> + 'parent)>,
